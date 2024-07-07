@@ -1,6 +1,9 @@
 """
-Author: Benny
+Author: Benny, Marc
 Date: Nov 2019
+
+Run:
+python train_classification.py --model pointnet2_cls_msg --classes 5 --batch_size 8 --epoch 20 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52
 """
 
 import os
@@ -18,6 +21,7 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 from data_utils.ModelNetDataLoader import ModelNetDataLoader
+from data_utils.InsectDataLoader import InsectDataLoader
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -26,20 +30,18 @@ sys.path.append(os.path.join(ROOT_DIR, 'models'))
 def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('training')
-    parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
-    parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
-    parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
-    parser.add_argument('--model', default='pointnet_cls', help='model name [default: pointnet_cls]')
-    parser.add_argument('--num_category', default=40, type=int, choices=[10, 40],  help='training on ModelNet10/40')
-    parser.add_argument('--epoch', default=200, type=int, help='number of epoch in training')
-    parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
-    parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
-    parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
     parser.add_argument('--log_dir', type=str, default=None, help='experiment root')
+    parser.add_argument('--dataset_dir', type=str, required=True, help='dataset directory')
+    parser.add_argument('--model', default='pointnet_cls', help='model name [default: pointnet_cls]')
+    parser.add_argument('--classes', type=str, default=5, 
+                        help='comma separated class names (e.g. bee,butterfly,...) or number [4,5,6] for default class list')
+    parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
+    parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
+    parser.add_argument('--epoch', default=20, type=int, help='number of epoch in training')
+    parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
+    parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='decay rate')
-    parser.add_argument('--use_normals', action='store_true', default=False, help='use normals')
-    parser.add_argument('--process_data', action='store_true', default=False, help='save data offline')
-    parser.add_argument('--use_uniform_sample', action='store_true', default=False, help='use uniform sampiling')
     return parser.parse_args()
 
 
@@ -48,6 +50,31 @@ def inplace_relu(m):
     if classname.find('ReLU') != -1:
         m.inplace=True
 
+def load_dataset(dataset_dir, args_classes):
+    if args_classes=="4":
+        classes = InsectDataLoader.CLASSES_4
+    elif args_classes=="5":
+        classes = InsectDataLoader.CLASSES_5
+    elif args_classes=="6":
+        classes = InsectDataLoader.CLASSES_6
+    elif isinstance(args_classes, str):
+        classes = args_classes.split(",")
+    else:
+        raise RuntimeError("Unsupported classes: " + str(args_classes))
+    
+    # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
+    full_dataset = InsectDataLoader(root=dataset_dir, classes=classes)
+
+    # split
+    train_size = int(0.8 * len(full_dataset))
+    test_size = len(full_dataset) - train_size
+    train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
+    print("train, test size:", len(train_dataset), len(test_dataset))
+
+    # data loaders
+    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, drop_last=True)
+    testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
+    return classes, train_dataset, test_dataset, trainDataLoader, testDataLoader
 
 def test(model, loader, num_class=40):
     mean_correct = []
@@ -85,20 +112,21 @@ def main(args):
 
     '''HYPER PARAMETER'''
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    # DEBUG
+    # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
-    '''CREATE DIR'''
-    timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-    exp_dir = Path('./log/')
-    exp_dir.mkdir(exist_ok=True)
-    exp_dir = exp_dir.joinpath('classification')
-    exp_dir.mkdir(exist_ok=True)
+    '''CREATE DIRS'''
+    exp_dir = Path('./log/classification')
     if args.log_dir is None:
+        timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
         exp_dir = exp_dir.joinpath(timestr)
     else:
         exp_dir = exp_dir.joinpath(args.log_dir)
-    exp_dir.mkdir(exist_ok=True)
+    exp_dir.mkdir(exist_ok=True, parents=True)
+
     checkpoints_dir = exp_dir.joinpath('checkpoints/')
     checkpoints_dir.mkdir(exist_ok=True)
+    
     log_dir = exp_dir.joinpath('logs/')
     log_dir.mkdir(exist_ok=True)
 
@@ -115,22 +143,16 @@ def main(args):
     log_string(args)
 
     '''DATA LOADING'''
-    log_string('Load dataset ...')
-    data_path = 'data/modelnet40_normal_resampled/'
-
-    train_dataset = ModelNetDataLoader(root=data_path, args=args, split='train', process_data=args.process_data)
-    test_dataset = ModelNetDataLoader(root=data_path, args=args, split='test', process_data=args.process_data)
-    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=10, drop_last=True)
-    testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=10)
+    classes, _, _, train_data_loader, test_data_loader = load_dataset(args.dataset_dir, args.classes)
+    log_string("Using classes: " + str(classes))
 
     '''MODEL LOADING'''
-    num_class = args.num_category
     model = importlib.import_module(args.model)
     shutil.copy('./models/%s.py' % args.model, str(exp_dir))
     shutil.copy('models/pointnet2_utils.py', str(exp_dir))
     shutil.copy('./train_classification.py', str(exp_dir))
 
-    classifier = model.get_model(num_class, normal_channel=args.use_normals)
+    classifier = model.get_model(len(classes), normal_channel=args.use_normals)
     criterion = model.get_loss()
     classifier.apply(inplace_relu)
 
@@ -172,13 +194,13 @@ def main(args):
         classifier = classifier.train()
 
         scheduler.step()
-        for batch_id, (points, target) in tqdm(enumerate(trainDataLoader, 0), total=len(trainDataLoader), smoothing=0.9):
+        for batch_id, (points, target) in tqdm(enumerate(train_data_loader, 0), total=len(train_data_loader), smoothing=0.9):
             optimizer.zero_grad()
 
             points = points.data.numpy()
-            points = provider.random_point_dropout(points)
-            points[:, :, 0:3] = provider.random_scale_point_cloud(points[:, :, 0:3])
-            points[:, :, 0:3] = provider.shift_point_cloud(points[:, :, 0:3])
+            # points = provider.random_point_dropout(points)
+            # points[:, :, 0:3] = provider.random_scale_point_cloud(points[:, :, 0:3])
+            # points[:, :, 0:3] = provider.shift_point_cloud(points[:, :, 0:3])
             points = torch.Tensor(points)
             points = points.transpose(2, 1)
 
@@ -199,7 +221,7 @@ def main(args):
         log_string('Train Instance Accuracy: %f' % train_instance_acc)
 
         with torch.no_grad():
-            instance_acc, class_acc = test(classifier.eval(), testDataLoader, num_class=num_class)
+            instance_acc, class_acc = test(classifier.eval(), test_data_loader, num_class=len(classes))
 
             if (instance_acc >= best_instance_acc):
                 best_instance_acc = instance_acc

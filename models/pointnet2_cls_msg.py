@@ -4,7 +4,8 @@ from pointnet2_utils import PointNetSetAbstractionMsg, PointNetSetAbstraction
 
 
 class get_model(nn.Module):
-    def __init__(self,num_class,normal_channel=True):
+    # cutoff_after [None, "fc2"]
+    def __init__(self, num_class, normal_channel=True):
         super(get_model, self).__init__()
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
@@ -30,13 +31,20 @@ class get_model(nn.Module):
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
         l3_xyz, l3_points = self.sa3(l2_xyz, l2_points)
         x = l3_points.view(B, 1024)
-        x = self.drop1(F.relu(self.bn1(self.fc1(x))))
-        x = self.drop2(F.relu(self.bn2(self.fc2(x))))
+        x = self.fc1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.drop1(x)
+        x = self.fc2(x)
+        x_fc2 = x
+        x = self.bn2(x)
+        x = F.relu(x)
+        x = self.drop2(x)
         x = self.fc3(x)
-        x = F.log_softmax(x, -1)
+        x = F.log_softmax(x, -1) # -> range [-inf, 0)
 
 
-        return x,l3_points
+        return x,l3_points,x_fc2
 
 
 class get_loss(nn.Module):
