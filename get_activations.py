@@ -1,6 +1,12 @@
 """
 Author: Benny
 Date: Nov 2019
+
+run with:
+python .\get_activations.py --model pointnet2_cls_msg --classes 5 --batch_size 8 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52 --log_dir 2024-07-03_23-11
+
+
+
 """
 from data_utils.ModelNetDataLoader import ModelNetDataLoader
 from data_utils.InsectDataLoader import InsectDataLoader
@@ -36,7 +42,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_dataset(dataset_dir, args_classes):
+def load_dataset(dataset_dir, args_classes, train_split=0.8):
     if args_classes=="4":
         classes = InsectDataLoader.CLASSES_4
     elif args_classes=="5":
@@ -51,16 +57,23 @@ def load_dataset(dataset_dir, args_classes):
     # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
     full_dataset = InsectDataLoader(root=dataset_dir, classes=classes)
 
-    # split
-    train_size = int(0.8 * len(full_dataset))
+    if train_split <= 0.0:
+        # put all in test
+        test_data_loader = torch.utils.data.DataLoader(full_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
+        print("train, test size:", 0, len(full_dataset))
+        return classes, None, None, full_dataset, test_data_loader
+    
+    # else:
+    # split in train and test
+    train_size = int(train_split * len(full_dataset))
     test_size = len(full_dataset) - train_size
     train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
     print("train, test size:", len(train_dataset), len(test_dataset))
 
     # data loaders
-    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, drop_last=True)
-    testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
-    return classes, train_dataset, test_dataset, trainDataLoader, testDataLoader
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, drop_last=True)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
+    return classes, train_dataset, test_dataset, train_data_loader, test_data_loader
 
 
 def get_activations(classifier, loader, classes):
@@ -108,12 +121,14 @@ def main(args):
     log_string(args)
 
     '''DATA LOADING'''
-    classes, _, _, _, test_data_loader = load_dataset(args.dataset_dir, args.classes)
+    classes, _, _, _, test_data_loader = load_dataset(args.dataset_dir, args.classes, train_split=0.0)
     log_string("Using classes: " + str(classes))
 
     '''MODEL LOADING'''
-    model_name = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
-    model = importlib.import_module(model_name)
+    # TODO use copied model file from log dir
+    # model_path = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
+    model_path = args.model
+    model = importlib.import_module(model_path)
 
     classifier = model.get_model(len(classes), normal_channel=args.use_normals)
     if not args.use_cpu:
@@ -131,7 +146,9 @@ def main(args):
         fragments_df = pd.DataFrame(activations_per_sample, \
                 columns=["sample_path", "target_name", *activations_header])
         timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-        fragments_df.to_csv(str(experiment_dir)+f"/logs/activations_per_class_{timestr}.csv", index=False, header=True, decimal='.', sep=',', float_format='%.4f')
+        activations_path = str(experiment_dir)+f"/logs/activations_per_class_{timestr}.csv"
+        fragments_df.to_csv(activations_path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
+        print("Saved to:", activations_path)
 
 
 if __name__ == '__main__':
