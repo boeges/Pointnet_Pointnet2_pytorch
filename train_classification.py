@@ -51,12 +51,12 @@ def inplace_relu(m):
         m.inplace=True
 
 def load_dataset(dataset_dir, args_classes):
-    if args_classes=="4":
-        classes = InsectDataLoader.CLASSES_4
-    elif args_classes=="5":
-        classes = InsectDataLoader.CLASSES_5
-    elif args_classes=="6":
-        classes = InsectDataLoader.CLASSES_6
+    if args_classes=="4A":
+        classes = InsectDataLoader.CLASSES_4A
+    elif args_classes=="5A":
+        classes = InsectDataLoader.CLASSES_5A
+    elif args_classes=="6A":
+        classes = InsectDataLoader.CLASSES_6A
     elif isinstance(args_classes, str):
         classes = args_classes.split(",")
     else:
