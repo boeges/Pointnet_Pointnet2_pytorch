@@ -33,8 +33,10 @@ def parse_args():
     parser.add_argument('--log_dir', type=str, default=None, help='experiment root')
     parser.add_argument('--dataset_dir', type=str, required=True, help='dataset directory')
     parser.add_argument('--model', default='pointnet_cls', help='model name [default: pointnet_cls]')
-    parser.add_argument('--classes', type=str, default=5, 
-                        help='comma separated class names (e.g. bee,butterfly,...) or number [4,5,6] for default class list')
+    parser.add_argument('--classes', type=str, default="6B", 
+                        help='Names of classes in order! Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
+    parser.add_argument('--use_classes', type=str, default="6B", 
+                        help='Names of classes to load samples from. Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
     parser.add_argument('--epoch', default=20, type=int, help='number of epoch in training')
@@ -50,44 +52,18 @@ def inplace_relu(m):
     if classname.find('ReLU') != -1:
         m.inplace=True
 
-def load_dataset(dataset_dir, args_classes):
-    if args_classes=="4A":
-        classes = InsectDataLoader.CLASSES_4A
-    elif args_classes=="5A":
-        classes = InsectDataLoader.CLASSES_5A
-    elif args_classes=="6A":
-        classes = InsectDataLoader.CLASSES_6A
-    elif isinstance(args_classes, str):
-        classes = args_classes.split(",")
-    else:
-        raise RuntimeError("Unsupported classes: " + str(args_classes))
-    
-    # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
-    full_dataset = InsectDataLoader(root=dataset_dir, classes=classes)
-
-    # split
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-    train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
-    print("train, test size:", len(train_dataset), len(test_dataset))
-
-    # data loaders
-    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, drop_last=True)
-    testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
-    return classes, train_dataset, test_dataset, trainDataLoader, testDataLoader
-
 def test(model, loader, num_class=40):
     mean_correct = []
     class_acc = np.zeros((num_class, 3))
     classifier = model.eval()
 
-    for j, (points, target) in tqdm(enumerate(loader), total=len(loader)):
+    for j, (points, target, path) in tqdm(enumerate(loader), total=len(loader)):
 
         if not args.use_cpu:
             points, target = points.cuda(), target.cuda()
 
         points = points.transpose(2, 1)
-        pred, _ = classifier(points)
+        pred, _, _ = classifier(points)
         pred_choice = pred.data.max(1)[1]
 
         for cat in np.unique(target.cpu()):
@@ -143,8 +119,10 @@ def main(args):
     log_string(args)
 
     '''DATA LOADING'''
-    classes, _, _, train_data_loader, test_data_loader = load_dataset(args.dataset_dir, args.classes)
-    log_string("Using classes: " + str(classes))
+    classes, use_classes, _, _, train_data_loader, test_data_loader = InsectDataLoader.load_dataset(
+        args.dataset_dir, class_names=args.classes, use_classes=args.use_classes, batch_size=args.batch_size, train_split=0.1)
+    log_string("Ordered class names: " + str(classes))
+    log_string("Using classes: " + str(use_classes))
 
     '''MODEL LOADING'''
     model = importlib.import_module(args.model)
@@ -152,7 +130,7 @@ def main(args):
     shutil.copy('models/pointnet2_utils.py', str(exp_dir))
     shutil.copy('./train_classification.py', str(exp_dir))
 
-    classifier = model.get_model(len(classes), normal_channel=args.use_normals)
+    classifier = model.get_model(len(classes), normal_channel=False)
     criterion = model.get_loss()
     classifier.apply(inplace_relu)
 
@@ -194,7 +172,7 @@ def main(args):
         classifier = classifier.train()
 
         scheduler.step()
-        for batch_id, (points, target) in tqdm(enumerate(train_data_loader, 0), total=len(train_data_loader), smoothing=0.9):
+        for batch_id, (points, target, path) in tqdm(enumerate(train_data_loader, 0), total=len(train_data_loader), smoothing=0.9):
             optimizer.zero_grad()
 
             points = points.data.numpy()
@@ -207,7 +185,7 @@ def main(args):
             if not args.use_cpu:
                 points, target = points.cuda(), target.cuda()
 
-            pred, trans_feat = classifier(points)
+            pred, trans_feat, activations = classifier(points)
             loss = criterion(pred, target.long(), trans_feat)
             pred_choice = pred.data.max(1)[1]
 

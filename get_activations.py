@@ -3,11 +3,11 @@ Author: Benny
 Date: Nov 2019
 
 run with:
-python .\get_activations.py --model pointnet2_cls_msg --classes 5 --batch_size 8 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52 --log_dir 2024-07-03_23-11
-
+python .\get_activations.py --model pointnet2_cls_msg --classes 6B --use_classes 6B --batch_size 8 --dataset_dir ..\..\datasets\insect\100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-23_12-17-56\ --log_dir 2024-07-25_22-10
 
 
 """
+
 from data_utils.ModelNetDataLoader import ModelNetDataLoader
 from data_utils.InsectDataLoader import InsectDataLoader
 import argparse
@@ -34,7 +34,9 @@ def parse_args():
     parser.add_argument('--model', default='pointnet_cls', help='model name [default: pointnet_cls]')
     parser.add_argument('--model_class_num', type=int, default=None, help='number of classes for the model output')
     parser.add_argument('--classes', type=str, default="6B", 
-                        help='comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
+                        help='Names of classes in order! Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
+    parser.add_argument('--use_classes', type=str, default="6B", 
+                        help='Names of classes to load samples from. Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=8, help='batch size in training')
@@ -92,11 +94,12 @@ def main(args):
     log_string(args)
 
     '''DATA LOADING'''
-    classes, _, _, _, test_data_loader = InsectDataLoader.load_dataset(args.dataset_dir, args.classes, args.batch_size, train_split=0.0)
-    log_string("Using classes: " + str(classes))
+    classes, use_classes, _, _, _, test_data_loader = InsectDataLoader.load_dataset(dataset_dir=args.dataset_dir, 
+            class_names=args.classes, use_classes=args.use_classes, batch_size=args.batch_size, train_split=0.0)
+    log_string("Ordered class names: " + str(classes))
+    log_string("Using classes: " + str(use_classes))
 
     '''MODEL LOADING'''
-    # TODO use copied model file from log dir
     # model_path = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
     model_path = args.model
     model = importlib.import_module(model_path)
@@ -118,7 +121,7 @@ def main(args):
         fragments_df = pd.DataFrame(activations_per_sample, \
                 columns=["sample_path", "target_name", *activations_header])
         timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-        activations_path = str(experiment_dir)+f"/logs/activations_per_class_{timestr}.csv"
+        activations_path = str(experiment_dir)+f"/logs/activations_per_sample_{timestr}.csv"
         fragments_df.to_csv(activations_path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
         print("Saved to:", activations_path)
 

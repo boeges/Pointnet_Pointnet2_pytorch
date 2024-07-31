@@ -49,7 +49,7 @@ def load_dataset(dataset_dir, args_classes):
         raise RuntimeError("Unsupported classes: " + str(args_classes))
     
     # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
-    full_dataset = InsectDataLoader(root=dataset_dir, classes=classes)
+    full_dataset = InsectDataLoader(root=dataset_dir, class_names=classes)
 
     # split
     train_size = int(0.8 * len(full_dataset))
