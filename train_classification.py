@@ -4,6 +4,9 @@ Date: Nov 2019
 
 Run:
 python train_classification.py --model pointnet2_cls_msg --classes 5 --batch_size 8 --epoch 20 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52
+
+
+
 """
 
 import os
@@ -44,6 +47,7 @@ def parse_args():
     parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
     parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
     parser.add_argument('--decay_rate', type=float, default=1e-4, help='decay rate')
+    parser.add_argument('--split_file', type=str, default=None, help='filename of train/test split file')
     return parser.parse_args()
 
 
@@ -65,6 +69,9 @@ def test(model, loader, num_class=40):
         points = points.transpose(2, 1)
         pred, _, _ = classifier(points)
         pred_choice = pred.data.max(1)[1]
+
+        # u = np.unique(target.cpu())
+        # print("u:", u)
 
         for cat in np.unique(target.cpu()):
             classacc = pred_choice[target == cat].eq(target[target == cat].long().data).cpu().sum()
@@ -120,7 +127,8 @@ def main(args):
 
     '''DATA LOADING'''
     classes, use_classes, _, _, train_data_loader, test_data_loader = InsectDataLoader.load_dataset(
-        args.dataset_dir, class_names=args.classes, use_classes=args.use_classes, batch_size=args.batch_size, train_split=0.1)
+        args.dataset_dir, class_names=args.classes, use_classes=args.use_classes, batch_size=args.batch_size, \
+            train_split=0.1, split_file=args.split_file)
     log_string("Ordered class names: " + str(classes))
     log_string("Using classes: " + str(use_classes))
 

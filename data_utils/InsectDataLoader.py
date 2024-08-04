@@ -13,6 +13,11 @@ from torch.utils.data import Dataset
 
 warnings.filterwarnings('ignore')
 
+# make key (scene_id, instance_id, frag_index).
+# example: "dragonfly/dragonfly_h3_6_5.csv" becomes ("hn-dra-1", 6, 5).
+def frag_filename_to_id(fn):
+    return "_".join(fn.replace(".csv","").split("_")[-3:])
+
 class InsectDataLoader(Dataset):
     # A uses old order; B uses new order
     CLASSES_4A = ["bee","butterfly","dragonfly","wasp"]
@@ -22,30 +27,36 @@ class InsectDataLoader(Dataset):
     CLASSES_7A = ["bee","butterfly","dragonfly","wasp","other","insect","bumblebee"]
     CLASSES_7B = ["other","insect","bee","butterfly","dragonfly","wasp","bumblebee"]
 
-    def __init__(self, root, class_names=CLASSES_6B, use_classes=None):
+    def __init__(self, root, class_names=CLASSES_6B, use_classes=None, use_samples=None):
         """
         Args:
             root (str): root path of dataset directory
-            classes (_type_, optional): Class list ordered by id, beginning at 0. Defaults to CLASSES_6B.
-            use_classes (_type_, optional): Load samples of only these classes. Defaults to None = all classes.
+            classes (_type_, list): Class list ordered by id, beginning at 0. Defaults to CLASSES_6B.
+            use_classes (_type_, list): Load samples of only these classes. Defaults to None = all classes.
+            use_samples (_type_, list): Only load these samples; Used to split in train and test with predefined lists.
         """
         self.root = root
         # <class_name>:<class_id>
         self.classes = dict(zip(class_names, range(len(class_names))))
 
         self.samples = []
-        skipped_count = 0
+        found_count = 0
         for f in Path(root).glob("*/*.csv"):
+            found_count += 1
+            if use_samples is not None:
+                fn = f.name
+                fid = frag_filename_to_id(fn)
+                if fid not in use_samples:
+                    continue
             clas = f.parent.name
             if use_classes is not None and clas not in use_classes:
                 # skip this sample if class is not used
-                skipped_count += 1
                 continue
             point_set = np.loadtxt(f, delimiter=',', skiprows=1, usecols=(0,1,2)).astype(np.float32)
             # point_set = np.zeros((10,10))
             rel_path = str(Path(clas) / f.name)
             self.samples.append( (point_set, clas, rel_path) )
-        print(f"Loaded dataset; {skipped_count} samples skipped!")
+        print(f"Loaded dataset; {len(self.samples)} samples loaded; {found_count-len(self.samples)} samples skipped!")
 
 
     def __len__(self):
@@ -84,36 +95,60 @@ class InsectDataLoader(Dataset):
         return classes
 
     @staticmethod
-    def load_dataset(dataset_dir, class_names, use_classes=None, batch_size=8, train_split=0.8):
+    def load_dataset(dataset_dir, class_names, use_classes=None, batch_size=8, train_split=0.8, split_file=None):
         class_names = InsectDataLoader.get_class_list(class_names)
         if use_classes is None:
             use_classes = class_names
         use_classes = InsectDataLoader.get_class_list(use_classes)
         
-        # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
-        full_dataset = InsectDataLoader(root=dataset_dir, class_names=class_names, use_classes=use_classes)
+        if split_file is not None:
+            # Use predefined split for train and test samples; Read sample ids from files (one for train and test)
 
+            # split_files is a string with a comma: "train_samples_file.txt,test_samples_file.txt"; in this order!
+            # Must be in the dataset directory!
+            train_test_fids = []
+            split_file_path = Path(dataset_dir) / split_file
+            print("Using train/test split file:", split_file_path)
 
-        if train_split <= 0.0:
-            # put all in test
-            test_data_loader = torch.utils.data.DataLoader(full_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            print("train, test size:", 0, len(full_dataset))
-            return class_names, use_classes, None, None, full_dataset, test_data_loader
-        
-        # else:
-        # split in train and test
-        train_size = int(train_split * len(full_dataset))
-        test_size = len(full_dataset) - train_size
-        # use fixed random generator
-        g_cpu = torch.Generator()
-        g_cpu.manual_seed(0)
-        # split!
-        train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size], generator=g_cpu)
-        print("train, test size:", len(train_dataset), len(test_dataset))
+            with open(split_file_path) as f:
+                lines = f.read().splitlines()
+                train_fids = [line.split(",")[-1] for line in lines if line.split(",")[0]=="train"]
+                test_fids = [line.split(",")[-1] for line in lines if line.split(",")[0]=="test"]
 
-        # data loaders
-        train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True)
-        test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+            train_dataset = InsectDataLoader(root=dataset_dir, class_names=class_names, use_classes=use_classes, use_samples=train_fids)
+            test_dataset = InsectDataLoader(root=dataset_dir, class_names=class_names, use_classes=use_classes, use_samples=test_fids)
+
+            train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True)
+            test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+
+            print("train, test size:", len(train_dataset), len(test_dataset))
+
+        else:
+            # Use percentual split; Or return the full dataset
+
+            # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
+            full_dataset = InsectDataLoader(root=dataset_dir, class_names=class_names, use_classes=use_classes)
+
+            if train_split <= 0.0:
+                # put all in test
+                test_data_loader = torch.utils.data.DataLoader(full_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+                print("train, test size:", 0, len(full_dataset))
+                return class_names, use_classes, None, None, full_dataset, test_data_loader
+            
+            # else:
+            # split in train and test
+            train_size = int(train_split * len(full_dataset))
+            test_size = len(full_dataset) - train_size
+            # use fixed random generator
+            g_cpu = torch.Generator()
+            g_cpu.manual_seed(0)
+            # split!
+            train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size], generator=g_cpu)
+            print("train, test size:", len(train_dataset), len(test_dataset))
+
+            # data loaders
+            train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True)
+            test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
         return class_names, use_classes, train_dataset, test_dataset, train_data_loader, test_data_loader
 
 
