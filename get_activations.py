@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument('--model_class_num', type=int, default=None, help='number of classes for the model output')
     parser.add_argument('--classes', type=str, default="6B", 
                         help='Names of classes in order! Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
-    parser.add_argument('--use_classes', type=str, default="6B", 
+    parser.add_argument('--use_classes', type=str, default=None, 
                         help='Names of classes to load samples from. Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
     parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
