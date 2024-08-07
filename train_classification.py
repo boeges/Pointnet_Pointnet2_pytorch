@@ -6,11 +6,11 @@ Run:
 python train_classification.py --model pointnet2_cls_msg --classes 5 --batch_size 8 --epoch 20 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52
 
 
-
 """
 
 import os
 import sys
+import time
 import torch
 import numpy as np
 
@@ -56,36 +56,41 @@ def inplace_relu(m):
     if classname.find('ReLU') != -1:
         m.inplace=True
 
-def test(model, loader, num_class=40):
-    mean_correct = []
-    class_acc = np.zeros((num_class, 3))
+
+def test(model, loader, num_classes=40):
     classifier = model.eval()
+    correct = 0
+    total = 0
+    correct_per_class = torch.zeros(num_classes)
+    total_per_class = torch.zeros(num_classes)
 
     for j, (points, target, path) in tqdm(enumerate(loader), total=len(loader)):
 
         if not args.use_cpu:
             points, target = points.cuda(), target.cuda()
 
+        # points is of shape (batch_size, num_points) and contains the data to classify
         points = points.transpose(2, 1)
+        # pred is an array of shape (batch_size, num_classes) with a float value for each class
         pred, _, _ = classifier(points)
+        # pred_choice is of shape (batch_size, 1) with an int for the index for the predicted class
         pred_choice = pred.data.max(1)[1]
 
-        # u = np.unique(target.cpu())
-        # print("u:", u)
+        # Update the overall correct count and total count
+        correct += pred_choice.eq(target.data).cpu().sum().item()
+        total += target.size(0)
 
-        for cat in np.unique(target.cpu()):
-            classacc = pred_choice[target == cat].eq(target[target == cat].long().data).cpu().sum()
-            class_acc[cat, 0] += classacc.item() / float(points[target == cat].size()[0])
-            class_acc[cat, 1] += 1
+        # Update the correct count and total count per class
+        for i in range(num_classes):
+            correct_per_class[i] += (pred_choice[target == i] == i).sum().item()
+            total_per_class[i] += (target == i).sum().item()
 
-        correct = pred_choice.eq(target.long().data).cpu().sum()
-        mean_correct.append(correct.item() / float(points.size()[0]))
+    overall_accuracy = correct / total
+    accuracy_per_class = correct_per_class / total_per_class
 
-    class_acc[:, 2] = class_acc[:, 0] / class_acc[:, 1]
-    class_acc = np.mean(class_acc[:, 2])
-    instance_acc = np.mean(mean_correct)
+    # accuracy_per_class is of type torch.Size([4]) torch.float32, ZB: tensor([1., 0., 0., 0.])
+    return overall_accuracy, accuracy_per_class
 
-    return instance_acc, class_acc
 
 
 def main(args):
@@ -171,6 +176,7 @@ def main(args):
     global_step = 0
     best_instance_acc = 0.0
     best_class_acc = 0.0
+    best_class_accs_fmt = np.array([])
 
     '''TRANING'''
     logger.info('Start training...')
@@ -204,19 +210,22 @@ def main(args):
             global_step += 1
 
         train_instance_acc = np.mean(mean_correct)
-        log_string('Train Instance Accuracy: %f' % train_instance_acc)
+        log_string('Train Instance Accuracy: %f. Evaluating now...' % train_instance_acc)
 
         with torch.no_grad():
-            instance_acc, class_acc = test(classifier.eval(), test_data_loader, num_class=len(classes))
-
+            instance_acc, class_accs = test(classifier.eval(), test_data_loader, num_classes=len(classes))
+            class_accs = class_accs.detach().cpu().numpy()
+            class_accs_fmt = ["%.3f" % acc for acc in class_accs]
+            mean_class_acc = np.mean(class_accs, axis=0)
+            
             if (instance_acc >= best_instance_acc):
                 best_instance_acc = instance_acc
                 best_epoch = epoch + 1
-
-            if (class_acc >= best_class_acc):
-                best_class_acc = class_acc
-            log_string('Test Instance Accuracy: %f, Class Accuracy: %f' % (instance_acc, class_acc))
-            log_string('Best Instance Accuracy: %f, Class Accuracy: %f' % (best_instance_acc, best_class_acc))
+            if (mean_class_acc >= best_class_acc):
+                best_class_acc = mean_class_acc
+                best_class_accs_fmt = class_accs_fmt
+            log_string('Test Instance Accuracy: %.3f, Class Accuracy: %.3f, %s' % (instance_acc, mean_class_acc, class_accs_fmt))
+            log_string('Best Instance Accuracy: %.3f, Class Accuracy: %.3f, %s' % (best_instance_acc, best_class_acc, best_class_accs_fmt))
 
             if (instance_acc >= best_instance_acc):
                 logger.info('Save model...')
@@ -225,7 +234,8 @@ def main(args):
                 state = {
                     'epoch': best_epoch,
                     'instance_acc': instance_acc,
-                    'class_acc': class_acc,
+                    'class_acc': mean_class_acc,
+                    'class_accs': class_accs,
                     'model_state_dict': classifier.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                 }
