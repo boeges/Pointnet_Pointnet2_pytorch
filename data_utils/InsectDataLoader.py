@@ -149,6 +149,7 @@ class InsectDataLoader(Dataset):
             # data loaders
             train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=True)
             test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+            
         return class_names, use_classes, train_dataset, test_dataset, train_data_loader, test_data_loader
 
 

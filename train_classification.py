@@ -131,11 +131,12 @@ def main(args):
     log_string(args)
 
     '''DATA LOADING'''
-    classes, use_classes, _, _, train_data_loader, test_data_loader = InsectDataLoader.load_dataset(
+    classes, use_classes, train_dataset, test_dataset, train_data_loader, test_data_loader = InsectDataLoader.load_dataset(
         args.dataset_dir, class_names=args.classes, use_classes=args.use_classes, batch_size=args.batch_size, \
             train_split=0.1, split_file=args.split_file)
     log_string("Ordered class names: " + str(classes))
     log_string("Using classes: " + str(use_classes))
+    print("train, test size:", len(train_dataset), len(test_dataset))
 
     '''MODEL LOADING'''
     model = importlib.import_module(args.model)
