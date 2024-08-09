@@ -144,7 +144,8 @@ def main(args):
     log_string("Using classes: " + str(use_classes))
 
     '''MODEL LOADING'''
-    model_name = os.listdir(experiment_dir + '/logs')[0].split('.')[0]
+    # model_name = os.listdir(experiment_dir + '/')[0].split('.')[0]
+    model_name = args.model
     model = importlib.import_module(model_name)
 
     classifier = model.get_model(len(classes), normal_channel=args.use_normals)
@@ -166,7 +167,10 @@ def main(args):
         fragments_df = pd.DataFrame(pred_per_class, \
                 columns=["sample_path", "target_name", "target_id", "pred_choice", *classes])
         timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-        fragments_df.to_csv(str(experiment_dir)+f"/logs/preds_per_sample_{timestr}.csv", index=False, header=True, decimal='.', sep=',', float_format='%.4f')
+        path = str(experiment_dir)+f"/logs/pred_per_sample_{timestr}.csv"
+        fragments_df.to_csv(path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
+        log_string('Saved predictions csv as %s' % (path))
+
 
 
 if __name__ == '__main__':

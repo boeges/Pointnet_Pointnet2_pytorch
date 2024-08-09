@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 warnings.filterwarnings('ignore')
 
 # make key (scene_id, instance_id, frag_index).
-# example: "dragonfly/dragonfly_h3_6_5.csv" becomes ("hn-dra-1", 6, 5).
+# example: "dragonfly/dragonfly_mu2-3_6_5.csv" becomes "mu2-3_6_5".
 def frag_filename_to_id(fn):
     return "_".join(fn.replace(".csv","").split("_")[-3:])
 
@@ -106,7 +106,6 @@ class InsectDataLoader(Dataset):
 
             # split_files is a string with a comma: "train_samples_file.txt,test_samples_file.txt"; in this order!
             # Must be in the dataset directory!
-            train_test_fids = []
             split_file_path = Path(dataset_dir) / split_file
             print("Using train/test split file:", split_file_path)
 
