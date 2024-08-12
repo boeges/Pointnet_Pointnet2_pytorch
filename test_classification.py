@@ -48,7 +48,7 @@ def test(model, loader, classes, vote_num=1):
     # evaluate on by original method
     overall_accuracy, accuracy_per_class, pred_per_sample = test1(model, loader, classes, vote_num)
     # evaluate per instance
-    test_per_instance(pred_per_sample)
+    test_per_instance(pred_per_sample, classes)
     return overall_accuracy, accuracy_per_class, pred_per_sample
 
 
@@ -99,7 +99,7 @@ def test1(model, loader, classes, vote_num=1):
     return overall_accuracy, accuracy_per_class, pred_per_class
 
 
-def test_per_instance(pred_per_class):
+def test_per_instance(pred_per_class, classes):
     def f2(v:str):
         vs = v.split("/")[-1].split(".")[-2].split("_")[-3:]
         return vs
