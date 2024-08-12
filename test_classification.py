@@ -145,7 +145,7 @@ def test_per_instance(pred_per_class, classes):
         accs.append(acc)
         print(f"{clas:<10}: Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
 
-    print("Unweighted mean Grouped-By-Instance Accuracy", np.mean(accs))
+    print("Unweighted mean Grouped-By-Instance Class Accuracy", np.mean(accs))
 
 
 def main(args):
