@@ -112,21 +112,19 @@ def test_per_instance(pred_per_class, classes):
     aggs = {
         "target_name":"first",
         "target_id":"first",
-        "bee":"mean",
-        "butterfly":"mean",
-        "dragonfly":"mean",
-        "wasp":"mean",
         "pred_choice":"nunique",
         # "pred_choice":pd.Series.mode,
     }
-
+    aggs_cl = {k:"mean" for k in classes}
+    aggs.update(aggs_cl)
+ 
     df1 = df.groupby(["scene","instance"]).agg(aggs).rename(columns={'pred_choice': 'nunique'})
     df1[df1["target_name"]=="dragonfly"]
 
     df2 = df1[["bee", "butterfly", "dragonfly", "wasp"]].idxmax(axis=1).rename("pred_name")
     df1 = pd.concat([df1,df2], axis=1)
 
-    classes = ["bee", "butterfly", "dragonfly", "wasp"]
+    # classes = ["bee", "butterfly", "dragonfly", "wasp"]
     cm = {v:k for k,v in enumerate(classes)}
     df1["pred_id"] = df1["pred_name"].map(cm)
 
