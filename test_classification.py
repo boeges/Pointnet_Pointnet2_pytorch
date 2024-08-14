@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument('--use_classes', type=str, default=None, 
                         help='Names of classes to load samples from. Comma separated class names (e.g. bee,butterfly,...) or a predefined list [6A, 6B, ...] for default class list')
     parser.add_argument('--use_cpu', action='store_true', default=False, help='use cpu mode')
-    parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
+    # parser.add_argument('--gpu', type=str, default='0', help='specify gpu device')
     parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
     parser.add_argument('--use_normals', action='store_true', default=False, help='use normals')
     parser.add_argument('--num_votes', type=int, default=3, help='Aggregate classification scores with voting')
@@ -152,7 +152,7 @@ def main(args):
         print(str)
 
     '''HYPER PARAMETER'''
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     '''SET DIR'''
     experiment_dir = args.log_dir
