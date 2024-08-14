@@ -19,13 +19,18 @@ def frag_filename_to_id(fn):
     return "_".join(fn.replace(".csv","").split("_")[-3:])
 
 class InsectDataLoader(Dataset):
-    # A uses old order; B uses new order
+    # A uses old order; B uses new order; C old order with bumblebee
+    # A
     CLASSES_4A = ["bee","butterfly","dragonfly","wasp"]
     CLASSES_5A = ["bee","butterfly","dragonfly","wasp","insect"]
     CLASSES_6A = ["bee","butterfly","dragonfly","wasp","insect","other"]
-    CLASSES_6B = ["other","insect","bee","butterfly","dragonfly","wasp"]
     CLASSES_7A = ["bee","butterfly","dragonfly","wasp","other","insect","bumblebee"]
+    # B
+    CLASSES_6B = ["other","insect","bee","butterfly","dragonfly","wasp"]
     CLASSES_7B = ["other","insect","bee","butterfly","dragonfly","wasp","bumblebee"]
+    # C
+    CLASSES_5C = ["bee","butterfly","dragonfly","wasp","bumblebee"]
+
 
     def __init__(self, root, class_names=CLASSES_6B, use_classes=None, use_samples=None):
         """
@@ -80,12 +85,14 @@ class InsectDataLoader(Dataset):
             classes = InsectDataLoader.CLASSES_5A
         elif args_classes=="6A":
             classes = InsectDataLoader.CLASSES_6A
-        elif args_classes=="6B":
-            classes = InsectDataLoader.CLASSES_6B
         elif args_classes=="7A":
             classes = InsectDataLoader.CLASSES_7A
+        elif args_classes=="6B":
+            classes = InsectDataLoader.CLASSES_6B
         elif args_classes=="7B":
             classes = InsectDataLoader.CLASSES_7B
+        elif args_classes=="5C":
+            classes = InsectDataLoader.CLASSES_5C
         elif isinstance(args_classes, str) and "," in args_classes:
             classes = args_classes.lower().split(",")
         elif isinstance(args_classes, list):
