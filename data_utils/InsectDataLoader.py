@@ -11,6 +11,8 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 
+import bee_utils as bee
+
 warnings.filterwarnings('ignore')
 
 # make key (scene_id, instance_id, frag_index).
@@ -30,6 +32,16 @@ class InsectDataLoader(Dataset):
     CLASSES_7B = ["other","insect","bee","butterfly","dragonfly","wasp","bumblebee"]
     # C
     CLASSES_5C = ["bee","butterfly","dragonfly","wasp","bumblebee"]
+
+    CLASS_ABBR = {
+        "oth":  "other",            # 0, other objects that are not insects
+        "ins":  "insect",           # 1, generic/unspecified insect
+        "bee":  "bee",              # 2
+        "but":  "butterfly",        # 3
+        "dra":  "dragonfly",        # 4
+        "was":  "wasp",             # 5
+        "bum":  "bumblebee",        # 6
+    }
 
 
     def __init__(self, root, class_names=CLASSES_6B, use_classes=None, use_samples=None):
@@ -95,6 +107,7 @@ class InsectDataLoader(Dataset):
             classes = InsectDataLoader.CLASSES_5C
         elif isinstance(args_classes, str) and "," in args_classes:
             classes = args_classes.lower().split(",")
+            classes = [InsectDataLoader.CLASS_ABBR.get(c, c) for c in classes]
         elif isinstance(args_classes, list):
             classes = args_classes
         else:
