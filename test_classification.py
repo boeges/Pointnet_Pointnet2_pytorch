@@ -1,6 +1,12 @@
 """
 Author: Benny
 Date: Nov 2019
+
+useage:
+CUDA_VISIBLE_DEVICES=1 python test_classification.py --log_dir log/classification/msg_cls4A_e40_bs8_pts4096_split40shot_4 --model pointnet2_cls_msg --classes 4A --batch_size 8 --dataset_dir ../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_4/ --split_file train_test_split_40shot.txt
+
+
+
 """
 from data_utils.ModelNetDataLoader import ModelNetDataLoader
 from data_utils.InsectDataLoader import InsectDataLoader
@@ -38,35 +44,15 @@ def parse_args():
     parser.add_argument('--split_file', type=str, default=None, help='filename of train/test split file')
     return parser.parse_args()
 
-
-def load_dataset(dataset_dir, args_classes):
-    if args_classes=="4":
-        classes = InsectDataLoader.CLASSES_4
-    elif args_classes=="5":
-        classes = InsectDataLoader.CLASSES_5
-    elif args_classes=="6":
-        classes = InsectDataLoader.CLASSES_6
-    elif isinstance(args_classes, str):
-        classes = args_classes.split(",")
-    else:
-        raise RuntimeError("Unsupported classes: " + str(args_classes))
-    
-    # dataset_dir = '../../datasets/insect/100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-03_23-04-52'
-    full_dataset = InsectDataLoader(root=dataset_dir, class_names=classes)
-
-    # split
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-    train_dataset, test_dataset = torch.utils.data.random_split(full_dataset, [train_size, test_size])
-    print("train, test size:", len(train_dataset), len(test_dataset))
-
-    # data loaders
-    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, drop_last=True)
-    testDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1)
-    return classes, train_dataset, test_dataset, trainDataLoader, testDataLoader
-
-
 def test(model, loader, classes, vote_num=1):
+    # evaluate on by original method
+    overall_accuracy, accuracy_per_class, pred_per_sample = test1(model, loader, classes, vote_num)
+    # evaluate per instance
+    test_per_instance(pred_per_sample, classes)
+    return overall_accuracy, accuracy_per_class, pred_per_sample
+
+
+def test1(model, loader, classes, vote_num=1):
     num_classes = len(classes)
     classifier = model.eval()
     correct = 0
@@ -76,7 +62,7 @@ def test(model, loader, classes, vote_num=1):
 
     # Save preds for each sample
     # [[sample_path, target_id, target_name, cla0_pred, c1_pred, c2_pred, ...], ...]
-    pred_per_sample = [] 
+    pred_per_class = [] 
 
     for j, (points, target, path) in tqdm(enumerate(loader), total=len(loader)):
         if not args.use_cpu:
@@ -104,13 +90,62 @@ def test(model, loader, classes, vote_num=1):
         # add each sample pred to list
         for pred1,choice1,target1,path1 in zip(pred.detach().cpu().numpy(), pred_choice.detach().cpu().numpy(), target.detach().cpu().numpy(), path):
             target_name = classes[target1]
-            pred_per_sample.append( [path1, target_name, target1, choice1, *pred1] )
+            pred_per_class.append( [path1, target_name, target1, choice1, *pred1] )
 
     overall_accuracy = correct / total
     accuracy_per_class = correct_per_class / total_per_class
 
     # accuracy_per_class is of type torch.Size([4]) torch.float32, ZB: tensor([1., 0., 0., 0.])
-    return overall_accuracy, accuracy_per_class, pred_per_sample
+    return overall_accuracy, accuracy_per_class, pred_per_class
+
+
+def test_per_instance(pred_per_class, classes):
+    def f2(v:str):
+        vs = v.split("/")[-1].split(".")[-2].split("_")[-3:]
+        return vs
+    
+    df = pd.DataFrame(pred_per_class, \
+            columns=["sample_path", "target_name", "target_id", "pred_choice", *classes])
+
+    df['scene'], df['instance'], df['frag'] = zip(*df['sample_path'].map(f2))
+
+    aggs = {
+        "target_name":"first",
+        "target_id":"first",
+        "bee":"mean",
+        "butterfly":"mean",
+        "dragonfly":"mean",
+        "wasp":"mean",
+        "pred_choice":"nunique",
+        # "pred_choice":pd.Series.mode,
+    }
+
+    df1 = df.groupby(["scene","instance"]).agg(aggs).rename(columns={'pred_choice': 'nunique'})
+    df1[df1["target_name"]=="dragonfly"]
+
+    df2 = df1[["bee", "butterfly", "dragonfly", "wasp"]].idxmax(axis=1).rename("pred_name")
+    df1 = pd.concat([df1,df2], axis=1)
+
+    classes = ["bee", "butterfly", "dragonfly", "wasp"]
+    cm = {v:k for k,v in enumerate(classes)}
+    df1["pred_id"] = df1["pred_name"].map(cm)
+
+    instance_count = df1.index.__len__()
+    num_correct = (df1["target_name"] == df1["pred_name"]).sum()
+    acc = num_correct/instance_count
+    print(f"Overall Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
+        
+    unq = df1["target_name"].unique()
+    accs = []
+    for clas in unq:
+        dfc = df1[df1["target_name"]==clas]
+        instance_count = dfc.index.__len__()
+        num_correct = (dfc["target_name"] == dfc["pred_name"]).sum()
+        acc = num_correct/instance_count
+        accs.append(acc)
+        print(f"{clas:<10}: Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
+
+    print("Unweighted mean Grouped-By-Instance Class Accuracy", np.mean(accs))
 
 
 def main(args):
@@ -121,7 +156,7 @@ def main(args):
     '''HYPER PARAMETER'''
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
-    '''CREATE DIR'''
+    '''SET DIR'''
     experiment_dir = args.log_dir
 
     '''LOG'''

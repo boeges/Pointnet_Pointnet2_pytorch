@@ -112,3 +112,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+
+
+# Marc
+# output stuff
+log/
