@@ -11,8 +11,6 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 
-import bee_utils as bee
-
 warnings.filterwarnings('ignore')
 
 # make key (scene_id, instance_id, frag_index).
