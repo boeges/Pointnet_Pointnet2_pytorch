@@ -62,7 +62,7 @@ def test1(model, loader, classes, vote_num=1):
 
     # Save preds for each sample
     # [[sample_path, target_id, target_name, cla0_pred, c1_pred, c2_pred, ...], ...]
-    pred_per_class = [] 
+    pred_per_sample = [] 
 
     for j, (points, target, path) in tqdm(enumerate(loader), total=len(loader)):
         if not args.use_cpu:
@@ -73,7 +73,7 @@ def test1(model, loader, classes, vote_num=1):
 
         for _ in range(vote_num):
             # pred range [-inf, 0)
-            pred, _, _ = classifier(points)
+            pred, _, fc2_activations = classifier(points)
             vote_pool += pred
         pred = vote_pool / vote_num
         pred_choice = pred.data.max(1)[1]
@@ -88,45 +88,57 @@ def test1(model, loader, classes, vote_num=1):
             total_per_class[i] += (target == i).sum().item()
 
         # add each sample pred to list
-        for pred1,choice1,target1,path1 in zip(pred.detach().cpu().numpy(), pred_choice.detach().cpu().numpy(), target.detach().cpu().numpy(), path):
+        for pred1,choice1,target1,path1,activations1 in zip(pred.detach().cpu().numpy(), pred_choice.detach().cpu().numpy(), \
+                                               target.detach().cpu().numpy(), path, fc2_activations.detach().cpu().numpy()):
             target_name = classes[target1]
-            pred_per_class.append( [path1, target_name, target1, choice1, *pred1] )
+            pred_name = classes[choice1]
+            pred_per_sample.append( {
+                "path":path1,
+                "target_name":target_name,
+                "pred_name":pred_name,
+                "preds":pred1, # array; pred per class
+                "activations":activations1, # array: featuere vec
+            } )
 
     overall_accuracy = correct / total
     accuracy_per_class = correct_per_class / total_per_class
 
     # accuracy_per_class is of type torch.Size([4]) torch.float32, ZB: tensor([1., 0., 0., 0.])
-    return overall_accuracy, accuracy_per_class, pred_per_class
+    return overall_accuracy, accuracy_per_class, pred_per_sample
 
 
-def test_per_instance(pred_per_class, classes):
+def test_per_instance(pred_per_sample, classes):
     def f2(v:str):
         vs = v.split("/")[-1].split(".")[-2].split("_")[-3:]
         return vs
     
-    df = pd.DataFrame(pred_per_class, \
-            columns=["sample_path", "target_name", "target_id", "pred_choice", *classes])
+    arr = []
+    for x in pred_per_sample:
+        arr.append([x["path"], x["target_name"], x["pred_name"], *x["preds"]])
+    
+    df = pd.DataFrame(arr, \
+            columns=["sample_path", "target_name", "pred_name", *classes])
+    
 
     df['scene'], df['instance'], df['frag'] = zip(*df['sample_path'].map(f2))
 
+    print(df.head())
+
     aggs = {
         "target_name":"first",
-        "target_id":"first",
-        "pred_choice":"nunique",
+        "pred_name":"nunique",
         # "pred_choice":pd.Series.mode,
     }
+    # take mean of each class prediction per trajectory
     aggs_cl = {k:"mean" for k in classes}
     aggs.update(aggs_cl)
  
-    df1 = df.groupby(["scene","instance"]).agg(aggs).rename(columns={'pred_choice': 'nunique'})
-    df1[df1["target_name"]=="dragonfly"]
+    # use pred_name only to count unique predictions; Not needed
+    df1 = df.groupby(["scene","instance"]).agg(aggs).rename(columns={'pred_name': 'nunique'})
 
+    # get pred_name from mean class predictions
     df2 = df1[["bee", "butterfly", "dragonfly", "wasp"]].idxmax(axis=1).rename("pred_name")
     df1 = pd.concat([df1,df2], axis=1)
-
-    # classes = ["bee", "butterfly", "dragonfly", "wasp"]
-    cm = {v:k for k,v in enumerate(classes)}
-    df1["pred_id"] = df1["pred_name"].map(cm)
 
     instance_count = df1.index.__len__()
     num_correct = (df1["target_name"] == df1["pred_name"]).sum()
@@ -189,16 +201,24 @@ def main(args):
     classifier.load_state_dict(checkpoint['model_state_dict'])
 
     with torch.no_grad():
-        instance_acc, class_accs, pred_per_class = test(classifier.eval(), test_data_loader, vote_num=args.num_votes, classes=classes)
+        instance_acc, class_accs, pred_per_sample = test(classifier.eval(), test_data_loader, vote_num=args.num_votes, classes=classes)
         class_accs = class_accs.detach().cpu().numpy()
         class_accs_fmt = ["%.3f" % acc for acc in class_accs]
         mean_class_acc = np.mean(class_accs, axis=0)
 
-        log_string('Test Instance Accuracy: %f, Class Accuracy: %f, %s, pred len: %f' % (instance_acc, mean_class_acc, class_accs_fmt, len(pred_per_class)))
+        log_string('Test Accuracy (Acc): %f, Mean Class Accuracy (mAcc): %f, %s, pred len: %f' % (instance_acc, mean_class_acc, class_accs_fmt, len(pred_per_sample)))
+
+        arr = []
+        for x in pred_per_sample:
+            # arr.append([x["path"], x["target_name"], x["pred_name"], *x["preds"], *x["activations"]])
+            arr.append([x["path"], x["target_name"], x["pred_name"], *x["preds"]])
         
         # Save predictions
-        fragments_df = pd.DataFrame(pred_per_class, \
-                columns=["sample_path", "target_name", "target_id", "pred_choice", *classes])
+        preds_header = classes
+        # activations_header = ["act_"+str(i) for i in range(len(pred_per_sample[0]["activations"]))]
+
+        fragments_df = pd.DataFrame(arr, \
+                columns=["sample_path", "target_name", "pred_name", *preds_header]) # , *activations_header
         timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
         path = str(experiment_dir)+f"/logs/pred_per_sample_{timestr}.csv"
         fragments_df.to_csv(path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')

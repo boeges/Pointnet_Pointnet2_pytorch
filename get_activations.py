@@ -51,7 +51,7 @@ def load_dataset(dataset_dir, args_classes, train_split=0.8):
 
 def get_activations(classifier, loader, classes):
     classifier = classifier.eval()
-    activations_per_sample = [] # [[sample_path, target_name [c0_activations, c1_act., c2_act., ...], ...]
+    pred_per_sample = []
 
     for j, (points, target, path) in tqdm(enumerate(loader), total=len(loader)):
         if not args.use_cpu:
@@ -60,14 +60,23 @@ def get_activations(classifier, loader, classes):
         points = points.transpose(2, 1)
 
         # also get activations from fc2-layer; see pointnet2_cls_msg class
-        prediciton, _, fc2_activations = classifier(points)
+        pred, _, fc2_activations = classifier(points)
+        pred_choice = pred.data.max(1)[1]
 
         # for each sample add activations to a list
-        for activations1, target1, path1 in zip(fc2_activations.detach().cpu().numpy(), target.detach().cpu().numpy(), path):
+        for pred1,choice1,target1,path1,activations1 in zip(pred.detach().cpu().numpy(), pred_choice.detach().cpu().numpy(), \
+                                               target.detach().cpu().numpy(), path, fc2_activations.detach().cpu().numpy()):
             target_name = classes[target1]
-            activations_per_sample.append( [path1, target_name, *activations1] )
+            pred_name = classes[choice1]
+            pred_per_sample.append( {
+                "path":path1,
+                "target_name":target_name,
+                "pred_name":pred_name,
+                "preds":pred1, # array; pred per class
+                "activations":activations1, # array: featuere vec
+            } )
 
-    return activations_per_sample
+    return pred_per_sample
 
 
 def main(args):
@@ -113,13 +122,19 @@ def main(args):
     classifier.load_state_dict(checkpoint['model_state_dict'])
 
     with torch.no_grad():
-        activations_per_sample = get_activations(classifier, test_data_loader, classes)
-        activations_header = ["act_"+str(i) for i in range(len(activations_per_sample[0])-2)]
+        pred_per_sample = get_activations(classifier, test_data_loader, classes)
+
+        preds_header = classes
+        activations_header = ["act_"+str(i) for i in range(len(pred_per_sample[0]["activations"]))]
         print("activations:", len(activations_header))
 
+        arr = []
+        for x in pred_per_sample:
+            arr.append([x["path"], x["target_name"], x["pred_name"], *x["preds"], *x["activations"]])
+
         # Save 
-        fragments_df = pd.DataFrame(activations_per_sample, \
-                columns=["sample_path", "target_name", *activations_header])
+        fragments_df = pd.DataFrame(arr, \
+                columns=["sample_path", "target_name", "pred_name", *preds_header, *activations_header])
         timestr = str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
         activations_path = str(experiment_dir)+f"/logs/activations_per_sample_{timestr}.csv"
         fragments_df.to_csv(activations_path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
