@@ -47,7 +47,7 @@ def parse_args():
 def test(model, loader, classes, vote_num=1):
     # evaluate on by original method
     overall_accuracy, accuracy_per_class, pred_per_sample = test1(model, loader, classes, vote_num)
-    # evaluate per instance
+    # evaluate per instance (group all fragments by trajectory)
     test_per_instance(pred_per_sample, classes)
     return overall_accuracy, accuracy_per_class, pred_per_sample
 
