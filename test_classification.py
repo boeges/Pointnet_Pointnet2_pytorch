@@ -175,7 +175,7 @@ def main(args):
     global logger
     logger = logging.getLogger("Model")
     logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     file_handler = logging.FileHandler('%s/eval.txt' % experiment_dir)
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(formatter)
