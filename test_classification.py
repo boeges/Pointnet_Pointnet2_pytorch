@@ -25,6 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
+logger = None
 
 def parse_args():
     '''PARAMETERS'''
@@ -143,7 +144,7 @@ def test_per_instance(pred_per_sample, classes):
     instance_count = df1.index.__len__()
     num_correct = (df1["target_name"] == df1["pred_name"]).sum()
     acc = num_correct/instance_count
-    print(f"Overall Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
+    log_string(f"Overall Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
         
     unq = df1["target_name"].unique()
     accs = []
@@ -153,16 +154,17 @@ def test_per_instance(pred_per_sample, classes):
         num_correct = (dfc["target_name"] == dfc["pred_name"]).sum()
         acc = num_correct/instance_count
         accs.append(acc)
-        print(f"{clas:<10}: Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
+        log_string(f"{clas:<10}: Grouped-By-Instance Accuracy {acc:.3f}; Instances={instance_count}; Correct={num_correct}")
 
-    print("Unweighted mean Grouped-By-Instance Class Accuracy", np.mean(accs))
+    log_string(f"Unweighted mean Grouped-By-Instance Class Accuracy {np.mean(accs):.3f}")
+
+
+def log_string(str):
+    logger.info(str)
+    print(str)
 
 
 def main(args):
-    def log_string(str):
-        logger.info(str)
-        print(str)
-
     '''HYPER PARAMETER'''
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
