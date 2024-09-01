@@ -25,6 +25,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
+def log_string(str):
+    logger.info(str)
+    print(str)
+
 def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('Testing')
@@ -160,10 +164,6 @@ def test_per_instance(pred_per_sample, classes):
 
 
 def main(args):
-    def log_string(str):
-        logger.info(str)
-        print(str)
-
     '''HYPER PARAMETER'''
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
@@ -226,8 +226,30 @@ def main(args):
         fragments_df.to_csv(path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
         log_string('Saved predictions csv as %s' % (path))
 
+def test3():
+    log_string("asd")
+
+def testtt(args):
+    '''SET DIR'''
+    experiment_dir = args.log_dir
+
+    '''LOG'''
+    args = parse_args()
+    global logger
+    logger = logging.getLogger("Model")
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler = logging.FileHandler('%s/eval.txt' % experiment_dir)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    log_string('PARAMETER ...')
+    log_string(args)
+
+    test3()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    main(args)
+    # main(args)
+    testtt(args)
