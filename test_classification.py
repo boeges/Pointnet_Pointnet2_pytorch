@@ -25,8 +25,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
-logger = None
-
 def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('Testing')
@@ -159,12 +157,13 @@ def test_per_instance(pred_per_sample, classes):
     log_string(f"Unweighted mean Grouped-By-Instance Class Accuracy {np.mean(accs):.3f}")
 
 
-def log_string(str):
-    logger.info(str)
-    print(str)
 
 
 def main(args):
+    def log_string(str):
+        logger.info(str)
+        print(str)
+
     '''HYPER PARAMETER'''
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
@@ -173,6 +172,7 @@ def main(args):
 
     '''LOG'''
     args = parse_args()
+    global logger
     logger = logging.getLogger("Model")
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
