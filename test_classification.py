@@ -226,30 +226,7 @@ def main(args):
         fragments_df.to_csv(path, index=False, header=True, decimal='.', sep=',', float_format='%.4f')
         log_string('Saved predictions csv as %s' % (path))
 
-def test3():
-    log_string("asd")
-
-def testtt(args):
-    '''SET DIR'''
-    experiment_dir = args.log_dir
-
-    '''LOG'''
-    args = parse_args()
-    global logger
-    logger = logging.getLogger("Model")
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler = logging.FileHandler('%s/eval.txt' % experiment_dir)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-    log_string('PARAMETER ...')
-    log_string(args)
-
-    test3()
-
 
 if __name__ == '__main__':
     args = parse_args()
-    # main(args)
-    testtt(args)
+    main(args)
