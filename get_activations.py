@@ -5,6 +5,8 @@ Date: Nov 2019
 run with:
 python .\get_activations.py --model pointnet2_cls_msg --classes 6B --use_classes 6B --batch_size 8 --dataset_dir ..\..\datasets\insect\100ms_4096pts_fps-ds_sor-nr_norm_shufflet_2024-07-23_12-17-56\ --log_dir 2024-07-25_22-10
 
+linux:
+CUDA_VISIBLE_DEVICES=0 python ./get_activations.py --model pointnet2_cls_msg --classes 5C --batch_size 8 --dataset_dir ../../datasets/insect/100ms_4096pts_rnd-ds_sor-nr_norm_shufflet_5 --log_dir ./log/classification/msg_cls5C_e40_bs8_pts4096_split40shot_ds5rnd
 
 """
 
