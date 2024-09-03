@@ -6,6 +6,8 @@ from pointnet2_utils import PointNetSetAbstractionMsg, PointNetSetAbstraction
 class get_model(nn.Module):
     # cutoff_after [None, "fc2"]
     def __init__(self, num_class, normal_channel=True):
+        print("init pointnet2_cls_msg_3")
+        
         super(get_model, self).__init__()
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
