@@ -30,6 +30,8 @@ class InsectDataLoader(Dataset):
     CLASSES_7B = ["other","insect","bee","butterfly","dragonfly","wasp","bumblebee"]
     # C
     CLASSES_5C = ["bee","butterfly","dragonfly","wasp","bumblebee"]
+    # other
+    CLASSES_I6 = ["insect","bee","butterfly","dragonfly","wasp","bumblebee"]
 
     CLASS_ABBR = {
         "oth":  "other",            # 0, other objects that are not insects
@@ -103,6 +105,8 @@ class InsectDataLoader(Dataset):
             classes = InsectDataLoader.CLASSES_7B
         elif args_classes=="5C":
             classes = InsectDataLoader.CLASSES_5C
+        elif args_classes=="I6":
+            classes = InsectDataLoader.CLASSES_I6
         elif isinstance(args_classes, str) and "," in args_classes:
             classes = args_classes.lower().split(",")
             classes = [InsectDataLoader.CLASS_ABBR.get(c, c) for c in classes]
