@@ -199,6 +199,11 @@ def main(args):
     if not args.use_cpu:
         classifier = classifier.cuda()
 
+    # Count Parameters
+    pytorch_total_params = sum(p.numel() for p in classifier.parameters())
+    pytorch_trainable_params = sum(p.numel() for p in classifier.parameters() if p.requires_grad)
+    print("Model parameters: total:", pytorch_total_params, ", trainable:", pytorch_trainable_params)
+
     checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
     classifier.load_state_dict(checkpoint['model_state_dict'])
 
